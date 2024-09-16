@@ -12,22 +12,30 @@ promClient.collectDefaultMetrics({ register });
 const httpRequestsTotal = new promClient.Counter({
   name: 'http_requests_total',
   help: 'Total number of HTTP requests',
-  labelNames: ['method', 'route', 'code']
+  labelNames: ['method', 'route', 'code'],
+  registers: [register]
 });
-register.registerMetric(httpRequestsTotal);
 
+// Middleware to increment the custom metric
 app.use((req, res, next) => {
-  httpRequestsTotal.inc({ method: req.method, route: req.route ? req.route.path : '/', code: res.statusCode });
+  res.on('finish', () => {
+    httpRequestsTotal.inc({
+      method: req.method,
+      route: req.route ? req.route.path : '/',
+      code: res.statusCode
+    });
+  });
   next();
+});
+
+// Route to serve metrics
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.send(await register.metrics());
 });
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
-});
-
-app.get('/metrics', (req, res) => {
-  res.set('Content-Type', register.contentType);
-  res.send(register.metrics());
 });
 
 app.listen(port, () => {
